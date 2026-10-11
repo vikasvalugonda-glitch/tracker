@@ -74,10 +74,11 @@ export async function POST(req: NextRequest) {
     });
 
     return setAuthCookie(response, token);
-  } catch (error) {
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : 'Internal server error while creating account';
     console.error('Registration error:', error);
     return NextResponse.json(
-      { error: 'Internal server error while creating account' },
+      { error: `Registration error: ${msg}` },
       { status: 500 }
     );
   }

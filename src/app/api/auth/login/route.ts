@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
 
     if (!userRow) {
       return NextResponse.json(
-        { error: 'Invalid email or password' },
+        { error: 'No account found with this email. Please click "Create account" below or use 1-Click Demo.' },
         { status: 401 }
       );
     }
@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
     const isMatch = await comparePassword(password, userRow.password_hash);
     if (!isMatch) {
       return NextResponse.json(
-        { error: 'Invalid email or password' },
+        { error: 'Incorrect password. Please verify and try again.' },
         { status: 401 }
       );
     }
@@ -67,10 +67,11 @@ export async function POST(req: NextRequest) {
     });
 
     return setAuthCookie(response, token);
-  } catch (error) {
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : 'Internal server error during authentication';
     console.error('Login error:', error);
     return NextResponse.json(
-      { error: 'Internal server error during authentication' },
+      { error: `Authentication error: ${msg}` },
       { status: 500 }
     );
   }

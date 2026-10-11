@@ -3,20 +3,65 @@ import path from 'path';
 import fs from 'fs';
 import bcrypt from 'bcryptjs';
 
-const DB_PATH = process.env.DATABASE_PATH || path.join(process.cwd(), 'tracker.db');
+function getDatabasePath(): string {
+  if (process.env.DATABASE_PATH) {
+    return process.env.DATABASE_PATH;
+  }
 
-// Ensure db directory exists if DB_PATH has a subfolder
-const dbDir = path.dirname(DB_PATH);
-if (!fs.existsSync(dbDir)) {
-  fs.mkdirSync(dbDir, { recursive: true });
+  // Detect serverless environment (Vercel, AWS Lambda, Netlify, etc.)
+  const isServerless = Boolean(
+    process.env.VERCEL || 
+    process.env.AWS_REGION || 
+    process.env.AWS_LAMBDA_FUNCTION_NAME ||
+    process.env.NETLIFY
+  );
+
+  if (isServerless) {
+    return path.join('/tmp', 'tracker.db');
+  }
+
+  // Check if process.cwd() is writable
+  try {
+    const testFile = path.join(process.cwd(), `.write_check_${Date.now()}`);
+    fs.writeFileSync(testFile, '1');
+    fs.unlinkSync(testFile);
+    return path.join(process.cwd(), 'tracker.db');
+  } catch {
+    // If process.cwd() is read-only (such as Vercel /var/task), fallback to /tmp
+    return path.join('/tmp', 'tracker.db');
+  }
 }
 
 let dbInstance: Database.Database | null = null;
 
 export function getDb(): Database.Database {
   if (!dbInstance) {
-    dbInstance = new Database(DB_PATH);
-    dbInstance.pragma('journal_mode = WAL');
+    const dbPath = getDatabasePath();
+    const dbDir = path.dirname(dbPath);
+    if (!fs.existsSync(dbDir)) {
+      try {
+        fs.mkdirSync(dbDir, { recursive: true });
+      } catch (e) {
+        console.warn('Could not create db directory:', e);
+      }
+    }
+
+    dbInstance = new Database(dbPath);
+
+    // On Vercel / serverless / /tmp, use DELETE journal mode to prevent POSIX shared memory locking errors
+    const isServerless = Boolean(
+      process.env.VERCEL || 
+      process.env.AWS_REGION || 
+      process.env.AWS_LAMBDA_FUNCTION_NAME ||
+      dbPath.startsWith('/tmp')
+    );
+
+    if (isServerless) {
+      dbInstance.pragma('journal_mode = DELETE');
+    } else {
+      dbInstance.pragma('journal_mode = WAL');
+    }
+
     dbInstance.pragma('foreign_keys = ON');
     initSchema(dbInstance);
   }

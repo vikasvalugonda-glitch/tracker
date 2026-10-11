@@ -36,8 +36,9 @@ export async function POST() {
     });
 
     return setAuthCookie(response, token);
-  } catch (error) {
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : 'Failed to authenticate demo user';
     console.error('Demo login error:', error);
-    return NextResponse.json({ error: 'Failed to authenticate demo user' }, { status: 500 });
+    return NextResponse.json({ error: `Demo login error: ${msg}` }, { status: 500 });
   }
 }
